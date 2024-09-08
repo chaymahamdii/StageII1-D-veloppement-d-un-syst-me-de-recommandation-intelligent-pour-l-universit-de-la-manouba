@@ -1,0 +1,107 @@
+from docx import Document
+
+def get_data_from_word(file_path):
+    doc = Document(file_path)
+    data = []
+    
+
+    for tab in doc.tables:
+        for row in tab.rows:
+            lab = row.cells[0].text.strip()
+            val = row.cells[1].text.strip()
+            data.append((lab, val))
+            
+    
+    return data
+
+file = 'AI 2 (1).docx'
+
+data = get_data_from_word(file)
+
+for i in range(len(data)):
+    if data[i][0] == 'Module designation':
+        data[i] = ('Module_designation', data[i][1])
+    elif data[i][0] == 'Semester(s) in which the module is taught':
+        data[i] = ('Semesters_in_which_the_module_is_taught', data[i][1])
+    elif 'Person' in data[i][0]:
+        data[i] = ('Coordinator', data[i][1])
+    elif data[i][0] == 'Relation to curriculum':
+        data[i] = ('Relation_to_curriculum', data[i][1])
+    elif data[i][0] == 'Teaching methods':
+        data[i] = ('Teaching_methods', data[i][1])
+    elif 'Workload' in data[i][0]:
+        data[i] = ('Workload', data[i][1])
+    elif 'Credit points' in data[i][0]:
+        data[i] = ('Credit_points', data[i][1])
+    elif 'prerequisites' in data[i][0]:
+        data[i] = ('Prerequisites', data[i][1])
+    elif 'outcomes' in data[i][0]:
+        data[i] = ('Objectives_and_intended_learning_outcomes', data[i][1])
+    elif 'Examination forms' in data[i][0]:
+        data[i] = ('Examination_forms', data[i][1])
+    elif 'Study and examination requirements' in data[i][0]:
+        data[i] = ('Study_and_examination_requirements', data[i][1])
+    elif 'Reading list' in data[i][0]:
+        data[i] = ('Reading_list', data[i][1])
+    
+        
+
+
+
+
+from neo4j import GraphDatabase
+
+
+uri = "bolt://localhost:7687" 
+user = "neo4j"
+pwd = "12345678"
+
+
+driver = GraphDatabase.driver(uri, auth=(user, pwd))
+
+
+def create_node(lab, name):
+    with driver.session(database="neo4j") as s:
+        s.write_transaction(
+            lambda tx: tx.run(
+                f"MERGE (:{lab} {{name: $name}})",
+                name=name
+            )
+        )
+        print(f"Created a node with label: {lab} and name: {name}") #check fo the nodes created 
+
+
+def create_rel(name1, name2,rel):
+    with driver.session(database="neo4j") as s:
+        s.write_transaction(
+            lambda tx: tx.run(
+               "MATCH (a {name: $name1}), (b {name: $name2}) "
+                "MERGE (a)-[r:RELATIONSHIP_TYPE {type: $rel}]->(b)",
+                name1=name1, name2=name2 , rel=rel
+            )
+        )
+        print(f"Created a relationship between {name1} and {name2}")  #check for the rel
+
+rel=['taught_in_semester', 'coordinated_by', 'taught_in', 'Relation_to_curriculum','taught_with', 'requires', 'to_read' ]
+for x in range(0,84,14):
+    create_node(data[x][0], data[x][1])
+    z=x
+    y=0
+    for lab, name in data[x+1:]:
+        z=z+1
+        if(z==x+14):
+            break
+        elif(lab=='Teaching team'):
+            z=z-1
+        elif(lab=='Teachers team'):
+            z=z-1
+        elif lab not in ['Workload','Content','Examination_forms','Objectives_and_intended_learning_outcomes','Credit_points','Study_and_examination_requirements']:
+            if(lab=='Prerequisites'):
+                lab='Module_designation'
+            if(len(lab)>1):
+                lab = lab[0].upper() + lab[1:]
+            create_node(lab, name)
+            create_rel(data[x][1], name, rel[y])
+            y=y+1
+
+driver.close()
